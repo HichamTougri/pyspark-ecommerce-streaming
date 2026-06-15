@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Flux Sankey</title>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #ecf0f1; padding: 20px; }
+        h1 { text-align: center; color: #2c3e50; }
+        #sankey_diagram { width: 100%; height: 700px; background-color: white; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); padding: 20px; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+    <h1>🌊 Flux de Données E-commerce (Temps Réel)</h1>
+    <div id="sankey_diagram"></div>
+
+    <script type="text/javascript">
+        google.charts.load('current', {'packages':['sankey']});
+        google.charts.setOnLoadCallback(initSankey);
+
+        let chart;
+
+        function initSankey() {
+            chart = new google.visualization.Sankey(document.getElementById('sankey_diagram'));
+            actualiserGraphe();
+            setInterval(actualiserGraphe, 3000); 
+        }
+
+        function actualiserGraphe() {
+            let cacheBuster = new Date().getTime();
+            
+            fetch('sankey_export.json?t=' + cacheBuster, { cache: 'no-store' })
+                .then(response => response.json())
+                .then(dataArray => {
+                    console.log("Mise à jour reçue :", dataArray);
+
+                    if (dataArray.length > 1) {
+                        var data = google.visualization.arrayToDataTable(dataArray);
+                        var options = {
+                            sankey: {
+                                node: { colors: ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#34495e', '#f1c40f'], nodePadding: 40, width: 25 },
+                                link: { colorMode: 'gradient' }
+                            }
+                        };
+                        chart.draw(data, options);
+                    }
+                })
+                .catch(err => console.log("En attente des données..."));
+        }
+    </script>
+</body>
+</html>
