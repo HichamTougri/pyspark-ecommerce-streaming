@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Graphe de Connexions Temps Réel</title>
+    
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    
+    <style>
+        /* Styles globaux et réinitialisation */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f4f6f9; 
+            color: #333;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        /* En-tête du tableau de bord */
+        header { text-align: center; margin-bottom: 25px; padding: 15px; background: #2c3e50; color: #fff; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        header h1 { font-size: 24px; font-weight: 600; }
+        header p { font-size: 14px; color: #bdc3c7; margin-top: 5px; }
+        
+        /* Panneau des statistiques (compteurs) */
+        .panel-stats { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; display: table; width: 100%; }
+        .stat-box { display: table-cell; text-align: center; width: 25%; padding: 10px; border-right: 1px solid #eef2f5; }
+        .stat-box:last-child { border-right: none; }
+        .stat-val { font-size: 22px; font-weight: bold; color: #2c3e50; }
+        .stat-lbl { font-size: 12px; color: #7f8c8d; text-transform: uppercase; margin-top: 4px; }
+        
+        /* Légende des types de nœuds */
+        .legend-container { text-align: center; margin-bottom: 15px; padding: 10px; background: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .legend-item { display: inline-block; margin: 0 15px; font-size: 13px; font-weight: 500; }
+        .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+        .dot-user { background-color: #3498db; }
+        .dot-product { background-color: #2ecc71; }
+        .dot-seller { background-color: #e67e22; }
+
+        /* Conteneur principal du graphe */
+        #network_diagram { width: 100%; height: 650px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+        .status-bar { text-align: right; font-size: 11px; color: #95a5a6; margin-top: 8px; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Dashboard Graphe de Connexions Temps Réel (LeBonCoin)</h1>
+            <p>Analyse des intéractions continues : Utilisateurs ➔ Actions ➔ Produits ➔ Vendeurs</p>
+        </header>
+
+        <div class="panel-stats">
+            <div class="stat-box"><div class="stat-val" id="cnt-total">0</div><div class="stat-lbl">Nœuds Totaux</div></div>
+            <div class="stat-box"><div class="stat-val" id="cnt-users">0</div><div class="stat-lbl">Utilisateurs (U)</div></div>
+            <div class="stat-box"><div class="stat-val" id="cnt-products">0</div><div class="stat-lbl">Produits (P)</div></div>
+            <div class="stat-box"><div class="stat-val" id="cnt-sellers">0</div><div class="stat-lbl">Vendeurs (S)</div></div>
+        </div>
+
+        <div class="legend-container">
+            <div class="legend-item"><span class="dot dot-user"></span>Utilisateurs (U)</div>
+            <div class="legend-item"><span class="dot dot-product"></span>Produits (P)</div>
+            <div class="legend-item"><span class="dot dot-seller"></span>Vendeurs (S)</div>
+        </div>
+
+        <div id="network_diagram"></div>
+        <div class="status-bar" id="status-update">En attente des données...</div>
+    </div>
+
+    <script type="text/javascript">
+        // Initialisation des variables globales pour le graphe
+        let network;
+        let nodesDataSet = new vis.DataSet([]);
+        let edgesDataSet = new vis.DataSet([]);
+
+        // Fonction d'initialisation du graphe
+        function initNetwork() {
+            const container = document.getElementById('network_diagram');
+            const data = { nodes: nodesDataSet, edges: edgesDataSet };
+            
+            // Configuration visuelle et physique (couleurs, tailles, physique des particules)
+            const options = {
+                nodes: { shape: 'dot', size: 16, font: { size: 12, color: '#2c3e50', face: 'Segoe UI' }, borderWidth: 2 },
+                edges: { width: 2, arrows: { to: { enabled: true, scaleFactor: 0.8 } }, font: { size: 10, align: 'middle', color: '#7f8c8d', background: '#ffffff' }, color: { color: '#bdc3c7', highlight: '#2980b9' }, smooth: { type: 'continuous' } },
+                groups: {
+                    Utilisateur: { color: { background: '#3498db', border: '#2980b9' }, size: 18 },
+                    Produit: { color: { background: '#2ecc71', border: '#27ae60' }, size: 16 },
+                    Vendeur: { color: { background: '#e67e22', border: '#d35400' }, size: 20 }
+                },
+                physics: { stabilization: false, barnesHut: { gravitationalConstant: -2000, centralGravity: 0.3, springLength: 95 } }
+            };
+            
+            // Création de l'instance Vis.js
+            network = new vis.Network(container, data, options);
+            
+            // Premier appel et mise en place de la boucle de rafraîchissement (toutes les 3 secondes)
+            actualiserGraphe();
+            setInterval(actualiserGraphe, 3000);
+        }
+
+        // Fonction de récupération et de mise à jour des données
+        function actualiserGraphe() {
+            // Contournement du cache navigateur pour garantir des données fraîches
+            let cacheBuster = new Date().getTime();
+            
+            fetch('graph_export.json?t=' + cacheBuster, { cache: 'no-store' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.nodes && data.edges) {
+                        
+                        // Mise à jour ou ajout des nœuds sans écraser l'existant
+                        nodesDataSet.update(data.nodes);
+
+                        // Génération d'ID uniques pour les arêtes (évite les bugs Vis.js lors des ajouts)
+                        data.edges.forEach(e => {
+                            e.id = e.from + "-" + e.to + "-" + e.label;
+                        });
+                        
+                        // Mise à jour ou ajout des arêtes
+                        edgesDataSet.update(data.edges);
+
+                        // Calcul des statistiques en parcourant tous les nœuds actuels
+                        let allNodes = nodesDataSet.get();
+                        let uCount = 0, pCount = 0, sCount = 0;
+                        
+                        allNodes.forEach(node => {
+                            if (node.group === 'Utilisateur') uCount++;
+                            else if (node.group === 'Produit') pCount++;
+                            else if (node.group === 'Vendeur') sCount++;
+                        });
+                        
+                        // Mise à jour de l'interface utilisateur
+                        document.getElementById('cnt-total').innerText = allNodes.length;
+                        document.getElementById('cnt-users').innerText = uCount;
+                        document.getElementById('cnt-products').innerText = pCount;
+                        document.getElementById('cnt-sellers').innerText = sCount;
+
+                        // Mise à jour de l'heure de la dernière synchronisation
+                        let d = new Date();
+                        document.getElementById('status-update').innerText = "Dernière mise à jour : " + d.toLocaleTimeString();
+                    }
+                })
+                .catch(err => console.log("Attente...")); // Gestion silencieuse des erreurs réseau
+        }
+
+        // Démarrage du script une fois que la page est chargée
+        window.addEventListener('DOMContentLoaded', initNetwork);
+    </script>
+</body>
+</html>
